@@ -29,6 +29,8 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     }
     env_vars = {
         'NCCL_DEBUG': 'Info',
+        'FI_CXI_DISABLE_HOST_REGISTER': '1',
+        'FI_MR_CACHE_MONITOR': 'userfaultfd'
     }
     tags = {'production', 'ce'}
 
