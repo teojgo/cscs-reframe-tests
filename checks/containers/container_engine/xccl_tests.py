@@ -21,22 +21,33 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     num_nodes = variable(int, value=2)
     min_bytes = variable(str, value='1024M')
     max_bytes = variable(str, value='1024M')
+    postrun_cmds = ['cat *_smi.out > smi_concat.out']
     container_env_table = {
         'annotations.com.hooks': {
             'cxi.enabled': 'true',
-            'aws_ofi_nccl.enabled': 'true'
+            #'aws_ofi_nccl.enabled': 'true'
         }
     }
+    container_mounts = [
+        '/capstor/scratch/cscs/manitart/nccl_plugin_todi/1.9.2-aws/libnccl-net.so:/usr/lib/libnccl-net-ofi.so',
+        "/usr/lib64/libhwloc.so.15:/usr/lib/libhwloc.so.15",
+        "/usr/lib64/libpciaccess.so.0:/usr/lib/libpciaccess.so.0",
+        "/usr/lib64/libxml2.so.2:/usr/lib/libxml2.so.2"
+    ]
+
     env_vars = {
         'NCCL_DEBUG': 'Info',
         'FI_CXI_DISABLE_HOST_REGISTER': '1',
-        'FI_MR_CACHE_MONITOR': 'userfaultfd'
+        'FI_MR_CACHE_MONITOR': 'userfaultfd',
+        'NCCL_NET_PLUGIN' : 'ofi',
+        #'NCCL_DEBUG_SUBSYS': 'ALL',
+        'FI_CXI_COMPAT': '0',
     }
     tags = {'production', 'ce'}
 
     @run_after('setup')
     def set_executable(self):
-        self.executable = f'{self.test_name}_perf'
+        self.executable = 'bash'
 
     @run_after('setup')
     def set_num_gpus_per_node(self):
@@ -48,12 +59,16 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     @run_after('setup')
     def set_executable_opts(self):
         self.executable_opts = [
-            f'-b {self.min_bytes}', f'-e {self.max_bytes}', f'-g 1'
+            '-c',
+            "'{ [[ $SLURM_LOCALID -eq 0 ]] && nvidia-smi > $(hostname)_smi.out; }; ",
+            f'{self.test_name}_perf',
+            f'-b {self.min_bytes}', f'-e {self.max_bytes}', f"-g 1'"
         ]
 
     @run_before('run')
     def set_pmi2(self):
-        self.job.launcher.options += ['--mpi=pmi2']
+        #self.job.launcher.options += ['--mpi=pmix']
+        self.job.launcher.options += ['--mpi=pmi2', '-u']
 
     @sanity_function
     def assert_sanity(self):
@@ -73,8 +88,12 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
         self.perf_patterns = {
             'GB/s': sn.extractsingle(
                 r'Avg bus bandwidth\s*:\s*(?P<gbs>\S+)',
-                self.stdout, 'gbs', float)
+                self.stdout, 'gbs', float),
+            'Max_Free_MiB': sn.max(sn.extractall(
+                r'(?P<free_mib>\d+)MiB\s*/\s*\d+MiB',
+                'smi_concat.out', 'free_mib', float))
         }
+
 
 
 @rfm.simple_test
@@ -101,11 +120,13 @@ class NCCLTestsCE(XCCLTestBase):
     @run_after('init')
     def setup_ce(self):
         cuda_major = self.image_tag.split('.')[0]
+
+        #self.container_image = '/capstor/scratch/cscs/manitart/ce_images/nccl-tests@torch_24.01.sqsh'
         self.container_image = (f'jfrog.svc.cscs.ch#reframe-oci/nccl-tests:'
                                 f'{self.image_tag}')
-        self.container_env_table['annotations.com.hooks'].update({
-            'aws_ofi_nccl.variant': cuda_major
-        })
+        #self.container_env_table['annotations.com.hooks'].update({
+        #    'aws_ofi_nccl.variant': cuda_major
+        #})
 
 @rfm.simple_test
 class RCCLTestCE(XCCLTestBase):
