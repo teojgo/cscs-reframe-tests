@@ -21,7 +21,10 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     num_nodes = variable(int, value=2)
     min_bytes = variable(str, value='1024M')
     max_bytes = variable(str, value='1024M')
-    postrun_cmds = ['cat *_smi.out > smi_concat.out']
+    postrun_cmds = [
+        'cat *_smi_start.out > smi_concat_start.out',
+        'cat *_smi_end.out > smi_concat_end.out'
+    ]
     container_env_table = {
         'annotations.com.hooks': {
             'cxi.enabled': 'true',
@@ -29,7 +32,7 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
         }
     }
     container_mounts = [
-        '/capstor/scratch/cscs/manitart/nccl_plugin_todi/1.9.2-aws/libnccl-net.so:/usr/lib/libnccl-net-ofi.so',
+        '/capstor/scratch/cscs/manitart/nccl_plugin_todi/1.13.0-aws/libnccl-net.so:/usr/lib/libnccl-net-ofi.so',
         "/usr/lib64/libhwloc.so.15:/usr/lib/libhwloc.so.15",
         "/usr/lib64/libpciaccess.so.0:/usr/lib/libpciaccess.so.0",
         "/usr/lib64/libxml2.so.2:/usr/lib/libxml2.so.2"
@@ -60,9 +63,10 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     def set_executable_opts(self):
         self.executable_opts = [
             '-c',
-            "'{ [[ $SLURM_LOCALID -eq 0 ]] && nvidia-smi > $(hostname)_smi.out; }; ",
+            "'{ [[ $SLURM_LOCALID -eq 0 ]] && nvidia-smi > $(hostname)_smi_start.out || true; }; ",
             f'{self.test_name}_perf',
-            f'-b {self.min_bytes}', f'-e {self.max_bytes}', f"-g 1'"
+            f'-b {self.min_bytes}', f'-e {self.max_bytes}', f"-g 1;",
+            "{ [[ $SLURM_LOCALID -eq 0 ]] && nvidia-smi > $(hostname)_smi_end.out || true; }'"
         ]
 
     @run_before('run')
@@ -89,9 +93,12 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
             'GB/s': sn.extractsingle(
                 r'Avg bus bandwidth\s*:\s*(?P<gbs>\S+)',
                 self.stdout, 'gbs', float),
-            'Max_Free_MiB': sn.max(sn.extractall(
+            'Start_Max_Free_MiB': sn.max(sn.extractall(
                 r'(?P<free_mib>\d+)MiB\s*/\s*\d+MiB',
-                'smi_concat.out', 'free_mib', float))
+                'smi_concat_start.out', 'free_mib', float)),
+            'End_Max_Free_MiB': sn.max(sn.extractall(
+                r'(?P<free_mib>\d+)MiB\s*/\s*\d+MiB',
+                'smi_concat_end.out', 'free_mib', float))
         }
 
 
