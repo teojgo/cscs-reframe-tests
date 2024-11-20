@@ -19,8 +19,8 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
     sourcesdir = None
     test_name = parameter(['all_reduce', 'sendrecv'])
     num_nodes = variable(int, value=2)
-    min_bytes = variable(str, value='1024M')
-    max_bytes = variable(str, value='1024M')
+    min_bytes = variable(str, value='4096M')
+    max_bytes = variable(str, value='4096M')
     postrun_cmds = [
         'cat *_smi_start.out > smi_concat_start.out',
         'cat *_smi_end.out > smi_concat_end.out'
@@ -40,8 +40,10 @@ class XCCLTestBase(rfm.RunOnlyRegressionTest, ContainerEngineMixin):
 
     env_vars = {
         'NCCL_DEBUG': 'Info',
+        'NCCL_CHECKS_DISABLE': '1',
         'FI_CXI_DISABLE_HOST_REGISTER': '1',
         'FI_MR_CACHE_MONITOR': 'userfaultfd',
+        #'NCCL_NET_GDR_LEVEL': 'PHB',
         'NCCL_NET_PLUGIN' : 'ofi',
         #'NCCL_DEBUG_SUBSYS': 'ALL',
         'FI_CXI_COMPAT': '0',
