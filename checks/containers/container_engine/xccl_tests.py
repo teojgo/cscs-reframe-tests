@@ -79,6 +79,14 @@ class NCCLTestsCE(XCCLTestBase):
     valid_systems = ['+ce +nvgpu']
     image_tag = parameter(['cuda12.3'])
 
+    cross_nic = variable(int, value=1)
+    disable_host_register = variable(int, value=1)
+    gdr_level = variable(str, value='PHB')
+    cache_monitor = variable(str, value='userfaultfd')
+    rx_match_mode = variable(str, value='software')
+    default_cq_size = variable(int, value=131072)
+    default_tx_size = variable(int, value=32768)
+
     # Disable Nvidia Driver requirement
     env_vars['NVIDIA_DISABLE_REQUIRE'] = 1
 
@@ -103,6 +111,19 @@ class NCCLTestsCE(XCCLTestBase):
         self.container_env_table['annotations.com.hooks'].update({
             'aws_ofi_nccl.variant': cuda_major
         })
+
+        self.container_env_table['env'] = {
+            'NCCL_CROSS_NIC': self.cross_nic,
+            'NCCL_NET_GDR_LEVEL': self.gdr_level,
+            'FI_CXI_DISABLE_HOST_REGISTER': self.disable_host_register,
+            'FI_CXI_RX_MATCH_MODE': self.rx_match_mode,
+            'FI_CXI_DEFAULT_CQ_SIZE': self.default_cq_size,
+            'FI_CXI_DEFAULT_TX_SIZE': self.default_tx_size,
+        }
+
+        if self.test_name == 'sendrecv':
+            self.env_vars['NCCL_NCHANNELS_PER_NET_PEER'] = 4
+
 
 @rfm.simple_test
 class RCCLTestCE(XCCLTestBase):
