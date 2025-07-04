@@ -1,0 +1,52 @@
+ARG BASE=docker.io/nvidia/cuda:12.9.1-devel-ubuntu22.04
+
+FROM $BASE
+
+ARG HPC_DIR=/container/hpc
+ARG CRAY_SRC_DIR=/tmp/cray-libs
+ARG LIBCXI_TAG=release/shs-12.0.1
+
+RUN apt-get update && \
+    apt-get install -y autoconf libtool git wget libhwloc-dev \
+                       libjson-c-dev libcurl4-openssl-dev python3 pkg-config \
+                       libyaml-dev libnl-3-dev libudev-dev libsensors-dev libconfig-dev \
+                       libuv1-dev libfuse-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p $HPC_DIR && \
+    mkdir -p ${CRAY_SRC_DIR} && \
+    cd ${CRAY_SRC_DIR} && \
+    git clone https://github.com/HewlettPackard/shs-cassini-headers.git && \
+    git clone https://github.com/HewlettPackard/shs-cxi-driver.git && \
+    git clone https://github.com/HewlettPackard/shs-libcxi.git
+
+RUN cd ${CRAY_SRC_DIR}/shs-cassini-headers && \
+    cp -r include ${HPC_DIR} && \
+    cp -r share ${HPC_DIR} && \
+    cp -r share/cassini-headers /usr/share && \
+    cp -r share/cassini-headers ${HPC_DIR}/share
+
+# Install the cxi-driver headers
+RUN cd $CRAY_SRC_DIR/shs-cxi-driver && \
+    cp -r include ${HPC_DIR} && \
+    cp include/linux/cxi/cxi.h ${HPC_DIR}/include
+
+RUN cxi_cflags="-Wno-unused-variable -Wno-unused-but-set-variable -I${HPC_DIR}/include -I${HPC_DIR}/linux -I${HPC_DIR}/uapi" && \
+    cxi_cppflags="-Wno-unused-variable -Wno-unused-but-set-variable -I${HPC_DIR}/include -I${HPC_DIR}/linux -I${HPC_DIR}/uapi" && \
+    cd ${CRAY_SRC_DIR}/shs-libcxi && \
+    git checkout -b ${LIBCXI_TAG} && \
+    ./autogen.sh && \
+    ./configure CFLAGS="${cxi_cflags}" CPPFLAGS="${cxi_cppflags}" && \
+    make && \
+    make install
+
+FROM docker.io/nvidia/cuda:12.9.1-runtime-ubuntu22.04
+
+RUN apt update && \
+    apt install -y libhwloc15 libnl-3-200 libsensors5 libconfig9 libuv1 libnuma1 libfuse2 && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=0 /usr/local/bin/* /usr/local/bin
+COPY --from=0 /usr/local/lib/libcxi* /usr/local/lib
